@@ -1,19 +1,28 @@
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { ChatOllama } from "@langchain/ollama";
 import type { APIRoute } from "astro";
-
-export const GET: APIRoute = async ({ url }) => {
-  const message = url.searchParams.get("message") ?? "";
-  console.log("message:", message);
-  if (!message) {
-    return new Response(
-      JSON.stringify({ error: 'Missing "message" query param' }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+import {
+  HumanMessage,
+  SystemMessage,
+  AIMessage,
+} from "@langchain/core/messages";
+import { ChatOllama } from "@langchain/ollama";
+import { z } from "zod";
+const chatSchema = z.array(
+  z.object({
+    role: z.string().refine((role) => role === "user" || role === "assistant"),
+    content: z.string(),
+  })
+);
+export const POST: APIRoute = async ({ request }) => {
+  const req = await request.json();
+  console.log("request:", req);
+  if (!chatSchema.safeParse(req.messages).success) {
+    return new Response(JSON.stringify({ error: 'Missing "messages"' }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
+
+  const msgs = req.messages as z.infer<typeof chatSchema>;
 
   const chat = new ChatOllama({
     model: "llama3.2",
@@ -24,7 +33,11 @@ export const GET: APIRoute = async ({ url }) => {
   try {
     const messages = await chat.invoke([
       new SystemMessage("You are a helpful assistant."),
-      new HumanMessage(message),
+      ...msgs.map((m) =>
+        m.role === "user"
+          ? new HumanMessage(m.content)
+          : new AIMessage(m.content)
+      ),
     ]);
 
     return new Response(JSON.stringify({ message: messages.content }), {

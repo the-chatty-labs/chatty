@@ -5,6 +5,17 @@ type Message = {
   content: string;
 };
 
+const fetchChatResponse = async (messages: Message[]) => {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ messages: messages }),
+  });
+  return response.json();
+};
+
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState<string>("");
@@ -13,10 +24,13 @@ export default function Chat() {
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.role === "user") {
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        { role: "assistant", content: "Thinking..." },
-      ]);
+      const last4Messages = messages.slice(-4);
+      fetchChatResponse(last4Messages).then((response) => {
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          { role: "assistant", content: response.message },
+        ]);
+      });
     }
   }, [messages]);
 
@@ -67,6 +81,11 @@ export default function Chat() {
           placeholder="Type your message here..."
           value={currentMessage}
           onChange={(e) => setCurrentMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              sendMessage();
+            }
+          }}
         ></textarea>
         <button
           className="ml-4 border border-gray-200 bg-gray-200 px-4 py-2"
