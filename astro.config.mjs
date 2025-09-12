@@ -10,6 +10,7 @@ export default defineConfig({
   integrations: [react()],
 
   vite: {
-    plugins: [tailwindcss()],
+    // Cast to Vite's PluginOption to avoid cross-package type identity conflicts under pnpm
+    plugins: [/** @type {import('vite').PluginOption} */ (tailwindcss())]
   },
 });
