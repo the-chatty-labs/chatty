@@ -21,7 +21,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss": "^4.1.13",
-    "zod": "^4.1.8"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "vite": "^6.3.6"
