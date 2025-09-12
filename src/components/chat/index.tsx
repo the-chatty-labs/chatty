@@ -1,31 +1,79 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export default function Chat() {
-  const [messages, setMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState<string>("");
+  const chatContainer = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === "user") {
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { role: "assistant", content: "Thinking..." },
+      ]);
+    }
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    chatContainer.current?.scrollTo({
+      top: chatContainer.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages]);
 
   const sendMessage = () => {
     console.log(currentMessage);
-    setMessages((prevMessages) => [...prevMessages, currentMessage]);
+    setMessages((prevMessages) => [
+      ...prevMessages,
+      { role: "user", content: currentMessage },
+    ]);
     setCurrentMessage("");
   };
 
   return (
-    <div>
-      <h1>Chat</h1>
-      <div id="chat">
+    <div className="flex flex-col h-screen container mx-auto align-center">
+      <h1 className="text-2xl font-bold text-center my-6">Chat</h1>
+      <div
+        id="chat"
+        ref={chatContainer}
+        className="flex flex-col h-full border border-gray-200 overflow-y-scroll"
+      >
         {messages.map((message, index) => (
-          <div key={index}>{message}</div>
+          <div
+            className={`p-4 ${
+              message.role === "user"
+                ? "bg-gray-200 text-right"
+                : "bg-white text-left"
+            }`}
+            key={index}
+          >
+            <p className="font-bold">{message.role}</p>
+            <p>{message.content}</p>
+          </div>
         ))}
       </div>
-      <div>
+      <div className="flex mb-12 mt-6">
         <textarea
+          className="flex-1 border border-gray-200"
           name="message"
           id="message"
+          rows={5}
+          placeholder="Type your message here..."
           value={currentMessage}
           onChange={(e) => setCurrentMessage(e.target.value)}
         ></textarea>
-        <button onClick={sendMessage}>Send</button>
+        <button
+          className="ml-4 border border-gray-200 bg-gray-200 px-4 py-2"
+          onClick={sendMessage}
+        >
+          Send
+        </button>
       </div>
     </div>
   );
