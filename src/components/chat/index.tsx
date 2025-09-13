@@ -52,11 +52,13 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col h-screen container mx-auto align-center">
-      <h1 className="text-2xl font-bold text-center my-6">Chat</h1>
+      <header className="flex my-6">
+        <h1 className="text-2xl font-bold">Chat</h1>
+      </header>
       <div
         id="chat"
         ref={chatContainer}
-        className="flex flex-col h-full border border-gray-200 overflow-y-scroll"
+        className="flex flex-col h-full border border-gray-200 overflow-y-auto"
       >
         {messages.map((message, index) => (
           <div
@@ -74,7 +76,7 @@ export default function Chat() {
       </div>
       <div className="flex mb-12 mt-6">
         <textarea
-          className="flex-1 border border-gray-200"
+          className="flex-1 textarea"
           name="message"
           id="message"
           rows={5}
@@ -87,10 +89,7 @@ export default function Chat() {
             }
           }}
         ></textarea>
-        <button
-          className="ml-4 border border-gray-200 bg-gray-200 px-4 py-2"
-          onClick={sendMessage}
-        >
+        <button className="btn" onClick={sendMessage}>
           Send
         </button>
       </div>

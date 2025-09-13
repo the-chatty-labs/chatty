@@ -6,12 +6,14 @@ import {
 } from "@langchain/core/messages";
 import { ChatOllama } from "@langchain/ollama";
 import { z } from "zod";
+
 const chatSchema = z.array(
   z.object({
     role: z.string().refine((role) => role === "user" || role === "assistant"),
     content: z.string(),
   })
 );
+
 export const POST: APIRoute = async ({ request }) => {
   const req = await request.json();
   console.log("request:", req);
