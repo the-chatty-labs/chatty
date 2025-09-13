@@ -25,6 +25,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "daisyui": "^5.1.10",
     "vite": "^6.3.6"
   },
   "overrides": {
