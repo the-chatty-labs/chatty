@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request }) => {
   });
 
   try {
-    const messages = await chat.invoke([
+    const message = await chat.invoke([
       new SystemMessage("You are a helpful assistant."),
       ...msgs.map((m) =>
         m.role === "user"
@@ -42,7 +42,14 @@ export const POST: APIRoute = async ({ request }) => {
       ),
     ]);
 
-    return new Response(JSON.stringify({ message: messages.content }), {
+    console.log("response:", message);
+    const response = {
+      message: message.content,
+      meta: message.response_metadata,
+      usage: message.usage_metadata,
+    };
+
+    return new Response(JSON.stringify(response), {
       headers: {
         "Content-Type": "application/json",
       },
