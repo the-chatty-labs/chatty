@@ -6,20 +6,7 @@ type Message = {
   content: string;
 };
 
-const fetchChatResponse = async (messages: Message[]) => {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ messages: messages }),
-  });
-  return response.json();
-};
-
 export default function Chat() {
-  const [respMeta, setRespMeta] = useState<Record<string, any> | null>(null);
-  const [respUsage, setRespUsage] = useState<Record<string, any> | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState<string>("");
   const chatContainer = useRef<HTMLDivElement>(null);
@@ -28,14 +15,34 @@ export default function Chat() {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.role === "user") {
       const last4Messages = messages.slice(-4);
-      fetchChatResponse(last4Messages).then((response) => {
-        console.log(response);
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          { role: "assistant", content: response.message },
-        ]);
-        setRespMeta(response.meta);
-        setRespUsage(response.usage);
+
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { role: "assistant", content: "" },
+      ]);
+
+      fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages: last4Messages }),
+      }).then(async (response) => {
+        if (!response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          setMessages((prevMessages) => {
+            const newMessages = [...prevMessages];
+            newMessages[newMessages.length - 1].content += chunk;
+            return newMessages;
+          });
+        }
       });
     }
   }, [messages]);
@@ -83,20 +90,7 @@ export default function Chat() {
           </div>
         ))}
       </div>
-      <div className="meta flex justify-between">
-        {respMeta ? (
-          <>
-            <p>
-              {(respMeta.eval_count / respMeta.eval_duration) * 10e9} token/s{" "}
-            </p>
-          </>
-        ) : null}
-        {respUsage ? (
-          <>
-            <p>{respUsage.total_tokens} token used</p>
-          </>
-        ) : null}
-      </div>
+      <div className="meta flex justify-between"></div>
 
       <div className="flex mb-12 mt-6">
         <textarea

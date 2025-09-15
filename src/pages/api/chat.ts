@@ -1,4 +1,6 @@
 import type { APIRoute } from "astro";
+import pino, { destination } from "pino";
+import pretty from "pino-pretty";
 import {
   HumanMessage,
   SystemMessage,
@@ -6,6 +8,17 @@ import {
 } from "@langchain/core/messages";
 import { ChatOllama } from "@langchain/ollama";
 import { z } from "zod";
+
+const transport = pino.transport({
+  targets: [
+    {
+      target: "pino-pretty",
+      options: { colorize: false, destination: "./debug.log" },
+    },
+  ],
+});
+
+const logger = pino(transport);
 
 const chatSchema = z.array(
   z.object({
@@ -16,7 +29,7 @@ const chatSchema = z.array(
 
 export const POST: APIRoute = async ({ request }) => {
   const req = await request.json();
-  console.log("request:", req);
+  logger.info(req);
   if (!chatSchema.safeParse(req.messages).success) {
     return new Response(JSON.stringify({ error: 'Missing "messages"' }), {
       status: 400,
@@ -26,14 +39,14 @@ export const POST: APIRoute = async ({ request }) => {
 
   const msgs = req.messages as z.infer<typeof chatSchema>;
 
-  const chat = new ChatOllama({
+  const model = new ChatOllama({
     model: "llama3.2",
     temperature: 0,
     // baseUrl: process.env.OLLAMA_BASE_URL, // e.g. "http://localhost:11434"
   });
 
   try {
-    const message = await chat.invoke([
+    const stream = await model.stream([
       new SystemMessage("You are a helpful assistant."),
       ...msgs.map((m) =>
         m.role === "user"
@@ -42,20 +55,27 @@ export const POST: APIRoute = async ({ request }) => {
       ),
     ]);
 
-    console.log("response:", message);
-    const response = {
-      message: message.content,
-      meta: message.response_metadata,
-      usage: message.usage_metadata,
-    };
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        for await (const chunk of stream) {
+          if (chunk.content) {
+            controller.enqueue(encoder.encode(chunk.content as string));
+          }
+        }
+        controller.close();
+      },
+    });
 
-    return new Response(JSON.stringify(response), {
+    return new Response(readableStream, {
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
       },
     });
   } catch (err: any) {
-    console.error("ChatOllama error:", err?.message ?? err);
+    logger.error(`ChatOllama error: ${err?.message ?? err}`);
     return new Response(
       JSON.stringify({
         error: "Model unreachable",
