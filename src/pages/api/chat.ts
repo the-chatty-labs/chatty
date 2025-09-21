@@ -6,7 +6,13 @@ import {
   SystemMessage,
   AIMessage,
 } from "@langchain/core/messages";
-import { ChatOllama } from "@langchain/ollama";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
+import { ChatOllama, OllamaEmbeddings } from "@langchain/ollama";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { z } from "zod";
 
 const transport = pino.transport({
@@ -20,6 +26,21 @@ const transport = pino.transport({
 
 const logger = pino(transport);
 
+const model = new ChatOllama({
+  model: "llama3.2",
+  temperature: 0,
+});
+
+const embeddings = new OllamaEmbeddings({
+  model: "nomic-embed-text",
+});
+const vectorStore = new MemoryVectorStore(embeddings);
+
+const splitter = new RecursiveCharacterTextSplitter({
+  chunkSize: 1000,
+  chunkOverlap: 200,
+});
+
 const chatSchema = z.array(
   z.object({
     role: z.string().refine((role) => role === "user" || role === "assistant"),
@@ -27,33 +48,69 @@ const chatSchema = z.array(
   })
 );
 
+const requestBodySchema = z.object({
+  messages: chatSchema,
+  docContent: z.string().optional().nullable(),
+});
+
 export const POST: APIRoute = async ({ request }) => {
   const req = await request.json();
   logger.info(req);
-  if (!chatSchema.safeParse(req.messages).success) {
-    return new Response(JSON.stringify({ error: 'Missing "messages"' }), {
+  const parseResult = requestBodySchema.safeParse(req);
+  if (!parseResult.success) {
+    return new Response(JSON.stringify({ error: parseResult.error }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  const msgs = req.messages as z.infer<typeof chatSchema>;
+  const reqBody = parseResult.data;
 
-  const model = new ChatOllama({
-    model: "llama3.2",
-    temperature: 0,
-    // baseUrl: process.env.OLLAMA_BASE_URL, // e.g. "http://localhost:11434"
-  });
+  const msgs = reqBody.messages;
+  const docContent = reqBody.docContent;
+  const hasDocContent = docContent && docContent.trim().length > 0;
+
+  let docsText = "";
+  if (hasDocContent) {
+    console.log("docContent", docContent.length);
+
+    const docs = await splitter.createDocuments(
+      [docContent],
+      [{ source: "user" }]
+    );
+    await vectorStore.addDocuments(docs);
+    const lastMsg = msgs[msgs.length - 1];
+    if (lastMsg.role === "user") {
+      const retriever = vectorStore.asRetriever();
+      const retrievedDocs = await retriever.invoke(lastMsg.content);
+      console.log("retrievedDocs", retrievedDocs);
+      // Combine the documents into a single string
+      docsText = retrievedDocs.map((d) => d.pageContent).join("");
+      console.log("docsText", docsText);
+    }
+  }
 
   try {
-    const stream = await model.stream([
-      new SystemMessage("You are a helpful assistant."),
-      ...msgs.map((m) =>
-        m.role === "user"
-          ? new HumanMessage(m.content)
-          : new AIMessage(m.content)
-      ),
+    const systemPrompt = `You are an assistant for question-answering tasks.`;
+    const systemPromptWithContext = `You are an assistant for question-answering tasks.
+Use the following pieces of retrieved context to answer the question.
+If you don't know the answer, just say that you don't know.
+Use three sentences maximum and keep the answer concise.
+Context: {context}:`;
+    const promptTemplate = ChatPromptTemplate.fromMessages([
+      ["system", hasDocContent ? systemPromptWithContext : systemPrompt],
+      new MessagesPlaceholder("msgs"),
     ]);
+
+    let promptValue;
+    if (hasDocContent) {
+      promptValue = await promptTemplate.invoke({ msgs, context: docsText });
+    } else {
+      promptValue = await promptTemplate.invoke({ msgs });
+    }
+    console.log(promptValue);
+
+    const stream = await model.stream(promptValue);
 
     const readableStream = new ReadableStream({
       async start(controller) {

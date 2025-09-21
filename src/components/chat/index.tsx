@@ -10,6 +10,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentMessage, setCurrentMessage] = useState<string>("");
   const chatContainer = useRef<HTMLDivElement>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
@@ -26,7 +27,10 @@ export default function Chat() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: last4Messages }),
+        body: JSON.stringify({
+          messages: last4Messages,
+          docContent: fileContent,
+        }),
       }).then(async (response) => {
         if (!response.body) return;
         const reader = response.body.getReader();
@@ -63,6 +67,18 @@ export default function Chat() {
     setCurrentMessage("");
   };
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target?.result as string;
+        setFileContent(content);
+      };
+      reader.readAsText(file);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen container mx-auto align-center">
       <header className="flex my-6">
@@ -92,24 +108,40 @@ export default function Chat() {
       </div>
       <div className="meta flex justify-between"></div>
 
-      <div className="flex mb-12 mt-6">
-        <textarea
-          className="flex-1 textarea"
-          name="message"
-          id="message"
-          rows={5}
-          placeholder="Type your message here..."
-          value={currentMessage}
-          onChange={(e) => setCurrentMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              sendMessage();
-            }
-          }}
-        ></textarea>
-        <button className="btn h-full" onClick={sendMessage}>
-          Send
-        </button>
+      <div className="mb-12 mt-6">
+        <div className="toolbar">
+          <input
+            type="file"
+            className="file-input file-input-ghost"
+            onChange={handleFileChange}
+          />
+        </div>
+        <div className="flex items-stretch">
+          <textarea
+            className="flex-1 textarea"
+            name="message"
+            id="message"
+            rows={5}
+            placeholder="Type your message here..."
+            value={currentMessage}
+            onChange={(e) => setCurrentMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing
+              ) {
+                e.preventDefault();
+                if (currentMessage.trim().length > 0) {
+                  sendMessage();
+                }
+              }
+            }}
+          ></textarea>
+          <button className="btn h-full" onClick={sendMessage}>
+            Send
+          </button>
+        </div>
       </div>
     </div>
   );
